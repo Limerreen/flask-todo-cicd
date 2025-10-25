@@ -1380,15 +1380,148 @@ start htmlcov/index.html  # Windows
 ```
 
 ## แนบรูปผลการทดลองการทดสอบระบบ
-```plaintext
-# แนบรูปผลการทดลองที่นี่
 
-``` 
+<img width="914" height="459" alt="image" src="https://github.com/user-attachments/assets/b8418e22-6b22-45cd-9aaf-9b06e0091ddf" />
+
+```
 ## คำถามการทดลอง
 ให้จับคู่ Code ส่วนของการทดสอบ กับ Code การทำงาน มาอย่างน้อย 3 ฟังก์ชัน พร้อมอธิบายการทำงานของแต่ละกรณี
 ```plaintext
-# ตอบคำถามที่นี่
+# การจับคู่ Code การทำงานกับ Test Cases (ตัวอย่าง 3 ฟังก์ชัน)
+1. GET /api/todos
 
+Code การทำงาน:
+
+@app.get('/api/todos')
+def get_todos():
+    try:
+        todos = Todo.query.order_by(Todo.created_at.desc()).all()
+        data = [todo.to_dict() for todo in todos]
+        return jsonify({
+            'success': True,
+            'count': len(data),
+            'data': data
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+Test Cases:
+
+def test_get_empty_todos(self, client):
+    response = client.get('/api/todos')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['success'] is True
+    assert data['count'] == 0
+    assert data['data'] == []
+
+@patch('app.routes.Todo.query')
+def test_get_todos_database_error(self, mock_query, client):
+    mock_query.order_by.return_value.all.side_effect = SQLAlchemyError('DB Error')
+    response = client.get('/api/todos')
+    assert response.status_code == 500
+    data = response.get_json()
+    assert data['success'] is False
+
+
+คำอธิบาย:
+
+กรณีปกติ: เมื่อฐานข้อมูลว่าง → ได้ success=True และ list ว่าง
+
+2. POST /api/todos
+
+Code การทำงาน:
+
+@app.post('/api/todos')
+def create_todo():
+    data = request.get_json()
+    if not data or 'title' not in data:
+        return jsonify({'success': False, 'error': 'Title is required'}), 400
+    try:
+        todo = Todo(title=data['title'], description=data.get('description', ''))
+        db.session.add(todo)
+        db.session.commit()
+        return jsonify({'success': True, 'data': todo.to_dict(), 'message': 'Todo created'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+Test Cases:
+
+def test_create_todo_with_full_data(self, client):
+    todo_data = {'title': 'Test Todo', 'description': 'This is a test todo'}
+    response = client.post('/api/todos', json=todo_data)
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data['success'] is True
+    assert data['data']['title'] == 'Test Todo'
+
+def test_create_todo_without_title(self, client):
+    response = client.post('/api/todos', json={})
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data['success'] is False
+    assert 'Title is required' in data['error']
+
+
+คำอธิบาย:
+
+กรณีปกติ: สร้าง Todo ถูกต้อง → 201 Created
+
+กรณีผิดพลาด: ไม่มี title → 400 Bad Request พร้อมข้อความแจ้ง
+
+3. 
+ PUT /api/todos/<id>
+
+Code การทำงาน:
+
+@app.put('/api/todos/<int:todo_id>')
+def update_todo(todo_id):
+    todo = Todo.query.get(todo_id)
+    if not todo:
+        return jsonify({'success': False, 'error': 'Todo not found'}), 404
+    data = request.get_json()
+    try:
+        todo.title = data.get('title', todo.title)
+        todo.description = data.get('description', todo.description)
+        todo.completed = data.get('completed', todo.completed)
+        db.session.commit()
+        return jsonify({'success': True, 'data': todo.to_dict(), 'message': 'Todo updated'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+Test Cases:
+
+def test_update_todo_title(self, client, app):
+    with app.app_context():
+        todo = Todo(title='Original Title')
+        db.session.add(todo)
+        db.session.commit()
+        todo_id = todo.id
+
+    update_data = {'title': 'Updated Title'}
+    response = client.put(f'/api/todos/{todo_id}', json=update_data)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['success'] is True
+    assert data['data']['title'] == 'Updated Title'
+
+def test_update_nonexistent_todo(self, client):
+    response = client.put('/api/todos/9999', json={'title': 'Updated'})
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data['success'] is False
+
+
+คำอธิบาย:
+
+กรณีปกติ: อัปเดต Todo → 200 OK พร้อมข้อมูลอัปเดต
+
+กรณีผิดพลาด: Todo ไม่อยู่ → 404 Not Found
 
 ```
 
@@ -1731,7 +1864,7 @@ https://flask-todo-app.onrender.com
 **ทำการ push ไปที่ GitHub Repository** แล้วตรวจสอบผลการทำงาน
 ## บันทึกรูปผลการทำงาน
 ```bash
-# บันทึกรูปผลการทำงานที่นี่
+
 ``` 
 
 ---
@@ -2142,15 +2275,35 @@ docker-compose up -d
 
 1. **Docker Architecture**:
    - เหตุใดจึงต้องแยก database และ application เป็นคนละ containers ?
+- เพื่อ **แยกการทำงาน (Isolation)** : ถ้า App ล่ม Database ยังทำงานได้ และในทางกลับกัน  
+- เพื่อ **ขยายระบบได้ง่าย (Scalability)** : สามารถ scale app หลาย instance ได้โดยใช้ DB เดียว  
+- เพื่อ **บำรุงรักษาสะดวก (Maintainability)** : อัปเดต เปลี่ยนเวอร์ชัน หรือแก้ไขแต่ละส่วนได้อิสระ  
+- เพื่อ **เพิ่มความปลอดภัย (Security)** : จำกัดการเข้าถึง ลดความเสี่ยงจากการโจมตี  
    - Multi-stage build มีประโยชน์อย่างไร?
+- ช่วยให้ **Docker image มีขนาดเล็กลง** เพราะเอาเฉพาะไฟล์ที่จำเป็นไปใช้จริง  
+- แยก **ขั้นตอน build** (ที่ต้องใช้ tools เยอะ) ออกจาก **ขั้นตอน run** (ใช้แค่ output)  
+- เพิ่ม **ความปลอดภัย** เพราะไม่มีเครื่องมือ build ที่ไม่จำเป็นใน production  
+- ทำให้ **build เร็วและ deploy ง่ายขึ้น**
 
 2. **Testing Strategy**:
    - การวัด code coverage มีความสำคัญอย่างไร?
+- ใช้เพื่อวัดว่า “โค้ดส่วนใดถูกทดสอบแล้ว และส่วนใดยังไม่ถูกทดสอบ”
+- ช่วย ประเมินคุณภาพของ test → coverage สูง = ทดสอบครอบคลุม logic มาก
+- ช่วย ค้นหาช่องโหว่ของ test และลดความเสี่ยงจาก bug
+- มักใช้เป็น เกณฑ์ใน CI/CD pipeline เช่น ต้องมี coverage ≥ 80% ก่อน merge
 
 3. **Deployment**:
    - Health check endpoint มีความสำคัญอย่างไร?
-   - Render และ Railway มีความแตกต่างกันอย่่างไร?
-
+- ใช้ตรวจสอบว่า service ยังทำงานปกติหรือไม่
+- ระบบอย่าง Docker, Kubernetes, Render จะใช้ตรวจว่า container ยัง “สุขภาพดี”
+- หาก fail → ระบบสามารถ restart หรือถอดออกจาก load balancer ได้อัตโนมัติ
+- ใช้ในขั้นตอน post-deploy เพื่อยืนยันว่า service พร้อมก่อนเปิดใช้งานจริง
+   - Render และ Railway มีความแตกต่างกันอย่างไร?
+**Render** และ **Railway** เป็นบริการคลาวด์แบบ PaaS (Platform as a Service) ที่ใช้สำหรับ deploy แอปพลิเคชันโดยไม่ต้องจัดการเซิร์ฟเวอร์เอง แต่ทั้งสองมีจุดเด่นต่างกันในด้านการใช้งานและกลุ่มผู้ใช้เป้าหมาย
+**Render** จะเหมาะกับงานระดับ production หรือโปรเจกต์ที่ต้องการความเสถียรในระยะยาว เพราะสามารถปรับการทำงานได้ละเอียด เช่น การตั้งค่า auto-scale, cron jobs, และการเชื่อมต่อฐานข้อมูลภายในระบบเดียวกัน Render ต้องมีการตั้งค่าผ่านไฟล์คอนฟิก เช่น `render.yaml` เพื่อควบคุมการ deploy อย่างเป็นระบบ ซึ่งช่วยให้เหมาะกับทีมพัฒนาและการทำงานร่วมกันในโครงการขนาดกลางถึงใหญ่
+ในทางกลับกัน **Railway** เน้นความง่ายและความสะดวก เหมาะกับนักเรียน นักศึกษาหรือผู้เริ่มต้นพัฒนาโปรเจกต์ เนื่องจากสามารถเชื่อม GitHub แล้ว deploy ได้ทันทีโดยไม่ต้องตั้งค่าเยอะ ตัวระบบมีฐานข้อมูลให้ใช้งาน เช่น PostgreSQL หรือ MySQL และออกแบบมาให้เหมาะกับการทดลองหรือพัฒนา prototype อย่างรวดเร็ว แต่มีข้อจำกัดในด้านการปรับแต่งและการ scale เมื่อเทียบกับ Render
+**สรุป:**  
+Render เหมาะกับงานจริงระดับ production ที่ต้องการความเสถียรและยืดหยุ่นสูง ส่วน Railway เหมาะกับการพัฒนา ทดลอง หรือโปรเจกต์นักศึกษาที่เน้นใช้งานง่ายและ deploy ได้รวดเร็ว
 
 ---
 
@@ -2159,4 +2312,3 @@ docker-compose up -d
 - [Docker Best Practices](https://docs.docker.com/develop/dev-best-practices/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [12-Factor App Methodology](https://12factor.net/)
-
